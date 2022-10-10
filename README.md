@@ -1,4 +1,4 @@
-# Fork-of-xsandra-s-GeoGuessr-Path-Logger-script
+# Fork of xsandra's GeoGuessr Path Logger script
 
 This an attempt to fix some bugs and update a classic GeoGuessr user script.
 
