@@ -1,0 +1,1 @@
+# Fork-of-xsandra-s-GeoGuessr-Path-Logger-script
