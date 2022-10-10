@@ -4,7 +4,7 @@
 // @description Add a trace of where you have been to GeoGuessr’s results screen
 // @version 15a
 // @include https://www.geoguessr.com/*
-// @downloadURL
+// @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
 // @license MIT
 // @run-at document-start
