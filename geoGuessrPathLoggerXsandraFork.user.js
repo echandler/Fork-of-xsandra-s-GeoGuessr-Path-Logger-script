@@ -96,7 +96,7 @@ window.runAsClient = runAsClient;
 
 googleMapsPromise.then(() =>
     runAsClient(() => {
-        debugger;
+        //debugger;
 
         let g_SVObject = null;
 
