@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name Fork of xsandra's GeoGuessr Path Logger by echandler v15a
-// @namespace
+// @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
 // @version 15a
 // @include https://www.geoguessr.com/*
