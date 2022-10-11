@@ -34,6 +34,10 @@ GM_menu.create();
 
 ///////////////// Detect google maps scripts //////////////////////////////////////////////
 
+let alertTimer = setTimeout(function(){
+    alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
+}, 2000);
+
 const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";
 
 window.googleMapsPromise = new Promise((resolve, reject) => {
@@ -45,6 +49,7 @@ window.googleMapsPromise = new Promise((resolve, reject) => {
                     if (node.tagName === "SCRIPT" && node.src.startsWith(MAPS_API_URL)) {
                         // When it’s been added and loaded, load the script below.
                         node.addEventListener("load", () => resolve()); // jshint ignore:line
+                        clearTimeout(alertTimer);
                         if (scriptObserver) scriptObserver.disconnect();
                         scriptObserver = undefined;
                     }
@@ -80,6 +85,7 @@ window.googleMapsPromise = new Promise((resolve, reject) => {
             childList: true,
             subtree: true,
         });
+
     } catch (e) {
         alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
         // Promise will not short ciruit if reject is called.
