@@ -313,7 +313,7 @@ googleMapsPromise.then(() =>
 
                            // if (!n_._coords) return; // Not a polyline.
 
-                            n_.addListener("click", makeLineAnimation);
+                            n_.addListener("click", makeLineAnimation.bind(null, true));
 
                             n_.addListener("mouseover", function (e) {
                                 if (_infoWindow !== null) return;
@@ -367,7 +367,7 @@ googleMapsPromise.then(() =>
                                 makeLineAnimation();
                             }
 
-                            function makeLineAnimation() {
+                            function makeLineAnimation(startAnimationNow) {
                                 let animationMultiplier = 1;
 
                                 if (thisLineAnimation) {
@@ -383,7 +383,7 @@ googleMapsPromise.then(() =>
                                     // Wait for the map to finish between rounds before animating.
                                     thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
                                     markerListener();
-                                }, 2000, n_, animationMultiplier, map_);
+                                }, startAnimationNow? 1: 2000, n_, animationMultiplier, map_);
 
 
                                 document.body.addEventListener("keypress", _keypress);
