@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v15
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v16
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 15
+// @version 16
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -12,8 +12,7 @@
 // @grant  GM_unregisterMenuCommand
 // ==/UserScript==
 
-const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";
-
+///////////////// Create Tampermonkey menu button //////////////////////////////////////////////
 let GM_menu = {
     id: null,
     create: function () {
@@ -31,6 +30,10 @@ let GM_menu = {
 };
 
 GM_menu.create();
+
+///////////////// Detect google maps scripts //////////////////////////////////////////////
+
+const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";
 
 window.googleMapsPromise = new Promise((resolve, reject) => {
     try {
@@ -85,6 +88,8 @@ window.googleMapsPromise = new Promise((resolve, reject) => {
 // console.log(reason);
 //  });
 
+///////////////// Paste code into page context //////////////////////////////////////////////
+
 function runAsClient(f) {
     const s = document.createElement("script");
     s.type = "text/javascript";
@@ -96,7 +101,7 @@ window.runAsClient = runAsClient;
 
 googleMapsPromise.then(() =>
     runAsClient(() => {
-        //debugger;
+        debugger;
 
         let g_SVObject = null;
 
@@ -104,68 +109,11 @@ googleMapsPromise.then(() =>
 
         const KEEP_FOR = 1000 * 60 * 60 * 24 * 7; // 1 week
 
-        // Keep a track of the lines drawn on the map, so they can be removed
+        // Keep a track of stuff added to the map so they can be removed
         let pathStuff = [];
-
-        function isGamePage() {
-            let s = location.pathname.startsWith.bind(location.pathname);
-            return s("/challenge/") || s("/results/") || s("/game/");
-        }
-
-        // Detect if a results screen is visible, so the traces should be shown
-        function resultShown() {
-            let q = document.querySelector.bind(document);
-            return !!q("[data-qa=result-view-bottom]") || location.href.includes("results");
-        }
-
-        // Detect if only a single result is shown
-        function singleResult() {
-            let q = document.querySelector.bind(document);
-            return !!q("[data-qa=guess-description]") || !!q(".country-streak-result__sub-title");
-        }
 
         // Keep a track of whether we are in a round already
         let inGame = false;
-
-        // Get the game ID, for storing the trace against
-        function id() {
-            return location.href.match(/\w{15,}/);
-        }
-
-        function roundNumber() {
-            const el = document.querySelector("[data-qa=round-number] :nth-child(2)");
-            return el ? parseInt(el.innerHTML) : 0;
-        }
-
-        function roundID(n, gameID) {
-            return (gameID || id()) + "-" + (n || roundNumber());
-        }
-
-        // Get the location of the street view
-        function getPosition(sv) {
-            return {
-                lat: sv.position.lat(),
-                lng: sv.position.lng(),
-            };
-        }
-
-        // Remove all games older than a week
-        function clearOldGames() {
-            let pathData = getData();
-            let keys = Object.keys(pathData);
-
-            // Delete all games older than a week
-            const cutoff = Date.now() - KEEP_FOR;
-            for (const [gameID, data] of Object.entries(pathData)) {
-                if (data.t < cutoff) {
-                    delete pathData[gameID];
-                }
-            }
-
-            saveData(pathData);
-        }
-
-        clearOldGames();
 
         // Keep a track of the current round’s route
         let route = undefined;
@@ -174,6 +122,55 @@ googleMapsPromise.then(() =>
 
         // Keep a track of the start location for the current round, for detecting the return to start button
         let start = undefined;
+
+        let mapState = 0;
+
+        //////////////// Modify google maps //////////////////////////////////////////////
+
+        // When a StreetViewPanorama is constructed, add a listener for moving
+        const oldSV = google.maps.StreetViewPanorama;
+        google.maps.StreetViewPanorama = Object.assign(
+            function (...args) {
+                g_SVObject = this;
+                const res = oldSV.apply(this, args);
+                this.addListener("position_changed", () => SVPositionChangedEvent(this));
+                return res;
+            },
+            {
+                prototype: Object.create(oldSV.prototype),
+            }
+        );
+
+        // When a Map is constructed, add a listener for updating
+        const oldMap = google.maps.Map;
+        google.maps.Map = Object.assign(
+            function (...args) {
+                const res = oldMap.apply(this, args);
+                this.addListener("idle", () => onMapIdleEvent(this));
+                return res;
+            },
+            {
+                prototype: Object.create(oldMap.prototype),
+            }
+        );
+
+        // The geometry API isn’t loaded unless a Street View has been displayed since the last load.
+        function loadGeometry() {
+            return new Promise((resolve, reject) => {
+                const existingScript = document.querySelector("script[src^='https://maps.googleapis.com/maps-api-v3/api/js/']");
+                if (!existingScript) reject("No Google Maps loaded yet");
+                const libraryURL = existingScript.src.replace(/(.+\/)(.+?)(\.js)/, "$1geometry$3");
+                document.head.appendChild(
+                    Object.assign(document.createElement("script"), {
+                        onload: resolve,
+                        type: "text/javascript",
+                        src: libraryURL,
+                    })
+                );
+            });
+        }
+
+        //////////////// Google maps custom events //////////////////////////////////////////////
 
         // Handle the street view being navigated
         function SVPositionChangedEvent(sv) {
@@ -209,23 +206,6 @@ googleMapsPromise.then(() =>
                 console.error("GeoGuessr Path Logger Error:", e);
             }
         }
-
-        let mapState = 0;
-
-        // The geometry API isn’t loaded unless a Street View has been displayed since the last load.
-        const loadGeometry = () =>
-            new Promise((resolve, reject) => {
-                const existingScript = document.querySelector("script[src^='https://maps.googleapis.com/maps-api-v3/api/js/']");
-                if (!existingScript) reject("No Google Maps loaded yet");
-                const libraryURL = existingScript.src.replace(/(.+\/)(.+?)(\.js)/, "$1geometry$3");
-                document.head.appendChild(
-                    Object.assign(document.createElement("script"), {
-                        onload: resolve,
-                        type: "text/javascript",
-                        src: libraryURL,
-                    })
-                );
-            });
 
         function onMapIdleEvent(map_) {
             try {
@@ -271,7 +251,7 @@ googleMapsPromise.then(() =>
                         .map((key) => pathData[key]) // Get the map for this round
                         .filter((r) => r) // Ignore missing rounds
                         .map((r) => {
-                            const ret = [];
+                            let ret = [];
 
                             const pathCoords = [];
 
@@ -309,7 +289,15 @@ googleMapsPromise.then(() =>
                                         })
                                 )
                             );
-                            return ret.flatMap((x) => x);
+
+                            if (ret[0].length === 1 && ret[0][0]._coords[0].length <= 3) {
+                                // Player probably didn't move, maybe photoshere.
+                                return [];
+                            }
+
+                            ret = ret.flatMap((x) => x); // For breakpoint in devtools.
+
+                            return ret;
                         });
 
                     // Add all traces to the map
@@ -420,76 +408,6 @@ googleMapsPromise.then(() =>
             }
         }
 
-        // When a StreetViewPanorama is constructed, add a listener for moving
-        const oldSV = google.maps.StreetViewPanorama;
-        google.maps.StreetViewPanorama = Object.assign(
-            function (...args) {
-                g_SVObject = this;
-                const res = oldSV.apply(this, args);
-                this.addListener("position_changed", () => SVPositionChangedEvent(this));
-                return res;
-            },
-            {
-                prototype: Object.create(oldSV.prototype),
-            }
-        );
-
-        // When a Map is constructed, add a listener for updating
-        const oldMap = google.maps.Map;
-        google.maps.Map = Object.assign(
-            function (...args) {
-                const res = oldMap.apply(this, args);
-                this.addListener("idle", () => onMapIdleEvent(this));
-                return res;
-            },
-            {
-                prototype: Object.create(oldMap.prototype),
-            }
-        );
-
-        function getData() {
-            let pathData = localStorage["pathData"];
-            return pathData ? JSON.parse(pathData) : {};
-        }
-
-        function saveData(data) {
-            localStorage["pathData"] = JSON.stringify(data);
-        }
-
-        setInterval(function () {
-            // Run forever.
-            makeGeoGuessrButtonListeners();
-        }, 1000);
-
-        function makeGeoGuessrButtonListeners() {
-            const setUndo = document.querySelector('button[data-qa="undo-move"]');
-            const setCheckPoint = document.querySelector('button[data-qa="set-checkpoint"]');
-
-            if (!setCheckPoint || setCheckPoint._state !== undefined) return;
-
-            setCheckPoint._state = 0;
-
-            setCheckPoint.addEventListener("click", function (e) {
-                setCheckPoint._state = setCheckPoint._state === 1 ? 0 : 1;
-                if (setCheckPoint._state === 1) {
-                    const r = route.pathCoords[route.pathCoords.length - 1];
-                    const coord = r.pop();
-                    r.push(coord);
-                    route.pathCoords.push([coord]);
-                    route.checkPointCoords.push(coord);
-                    return;
-                } else {
-                    // Probably will have two identical points to fix minor bug.
-                    const a = [route.checkPointCoords[route.checkPointCoords.length - 1]];
-                    route.pathCoords.push(a);
-                }
-            });
-
-            setUndo.addEventListener("click", function (e) {
-                route.pathCoords.push([]);
-            });
-        }
-
         function addAnimatedMarker(pathCoords_, multiplier_, map_) {
             const lineSymbol = {
                 path: google.maps.SymbolPath.CIRCLE,
@@ -555,7 +473,7 @@ googleMapsPromise.then(() =>
 
                 if (d[n] > 0.001) {
                     // Speed up for long distances. Could be teleporting to start.
-                    incs = Math.ceil((d[n] / oneMeter / (speed * 6)) * 60);
+                    incs = Math.ceil((d[n] / oneMeter / (speed * 10)) * 60);
                 }
 
                 for (let m = 0; m < incs; m++) {
@@ -598,6 +516,112 @@ googleMapsPromise.then(() =>
                     animationCallback = null;
                 },
                 marker: marker,
+            };
+        }
+
+        //////////////// GeoGuessr buttons custom events //////////////////////////////////////////////
+
+        setInterval(function () {
+            // Run forever.
+            makeGeoGuessrButtonListeners();
+        }, 1000);
+
+        function makeGeoGuessrButtonListeners() {
+            const undoBtn = document.querySelector('button[data-qa="undo-move"]');
+            const checkPointBtn = document.querySelector('button[data-qa="set-checkpoint"]');
+
+            if (!checkPointBtn || checkPointBtn._state !== undefined) return;
+
+            checkPointBtn._state = 0;
+
+            checkPointBtn.addEventListener("click", function (e) {
+                checkPointBtn._state = checkPointBtn._state === 1 ? 0 : 1;
+                if (checkPointBtn._state === 1) {
+                    const r = route.pathCoords[route.pathCoords.length - 1];
+                    const coord = r.pop();
+                    r.push(coord);
+                    route.pathCoords.push([coord]);
+                    route.checkPointCoords.push(coord);
+                    return;
+                } else {
+                    // Probably will have two identical points to fix minor bug.
+                    const a = [route.checkPointCoords[route.checkPointCoords.length - 1]];
+                    route.pathCoords.push(a);
+                }
+            });
+
+            undoBtn.addEventListener("click", function (e) {
+                route.pathCoords.push([]);
+            });
+        }
+
+        //////////////// Clean up localStorage //////////////////////////////////////////////
+
+        // Remove all games older than a week
+        function clearOldGames() {
+            let pathData = getData();
+            let keys = Object.keys(pathData);
+
+            // Delete all games older than a week
+            const cutoff = Date.now() - KEEP_FOR;
+            for (const [gameID, data] of Object.entries(pathData)) {
+                if (data.t < cutoff) {
+                    delete pathData[gameID];
+                }
+            }
+
+            saveData(pathData);
+        }
+
+        clearOldGames();
+
+        //////////////// Utility functions //////////////////////////////////////////////
+
+        function getData() {
+            let pathData = localStorage["pathData"];
+            return pathData ? JSON.parse(pathData) : {};
+        }
+
+        function saveData(data) {
+            localStorage["pathData"] = JSON.stringify(data);
+        }
+
+        function isGamePage() {
+            let s = location.pathname.startsWith.bind(location.pathname);
+            return s("/challenge/") || s("/results/") || s("/game/");
+        }
+
+        // Detect if a results screen is visible, so the traces should be shown
+        function resultShown() {
+            let q = document.querySelector.bind(document);
+            return !!q("[data-qa=result-view-bottom]") || location.href.includes("results");
+        }
+
+        // Detect if only a single result is shown
+        function singleResult() {
+            let q = document.querySelector.bind(document);
+            return !!q("[data-qa=guess-description]") || !!q(".country-streak-result__sub-title");
+        }
+
+        // Get the game ID, for storing the trace against
+        function id() {
+            return location.href.match(/\w{15,}/);
+        }
+
+        function roundNumber() {
+            const el = document.querySelector("[data-qa=round-number] :nth-child(2)");
+            return el ? parseInt(el.innerHTML) : 0;
+        }
+
+        function roundID(n, gameID) {
+            return (gameID || id()) + "-" + (n || roundNumber());
+        }
+
+        // Get the location of the street view
+        function getPosition(sv) {
+            return {
+                lat: sv.position.lat(),
+                lng: sv.position.lng(),
             };
         }
     })
