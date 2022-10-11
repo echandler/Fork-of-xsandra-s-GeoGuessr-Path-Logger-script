@@ -1,19 +1,20 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v16
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v17
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 16
+// @version 17
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
 // @license MIT
 // @run-at document-start
-// @grant GM_registerMenuCommand
+// @grant  GM_registerMenuCommand
 // @grant  GM_unregisterMenuCommand
+// @grant  unsafeWindow
 // ==/UserScript==
 
 ///////////////// Create Tampermonkey menu button //////////////////////////////////////////////
-let GM_menu = {
+unsafeWindow.GM_menu = {
     id: null,
     create: function () {
         let state = JSON.parse(localStorage["pathLoggerAnimation"] || 1);
@@ -310,6 +311,8 @@ googleMapsPromise.then(() =>
 
                             n_.setMap(map_);
 
+                           // if (!n_._coords) return; // Not a polyline.
+
                             n_.addListener("click", makeLineAnimation);
 
                             n_.addListener("mouseover", function (e) {
@@ -325,6 +328,7 @@ googleMapsPromise.then(() =>
                                 btn.onclick = function (e) {
                                     localStorage["pathLoggerAnimation"] = !JSON.parse(localStorage["pathLoggerAnimation"] || 1);
                                     btn.innerText = JSON.parse(localStorage["pathLoggerAnimation"] || 1) == 1 ? "Turn auto play off" : "Turn auto play on";
+                                    GM_menu.create();
                                 };
 
                                 btn.innerText = state == 1 ? "Turn auto play off" : "Turn auto play on";
@@ -364,7 +368,8 @@ googleMapsPromise.then(() =>
                             }
 
                             function makeLineAnimation() {
-                                let t = 1;
+                                let animationMultiplier = 1;
+
                                 if (thisLineAnimation) {
                                     thisLineAnimation.clear();
                                     thisLineAnimation = null;
@@ -372,22 +377,27 @@ googleMapsPromise.then(() =>
                                     return;
                                 }
 
-                                thisLineAnimation = addAnimatedMarker(n_._coords, t, map_);
+                                thisLineAnimation = 'waiting';
 
-                                markerListener();
+                                setTimeout(function(n_, animationMultiplier, map_){
+                                    // Wait for the map to finish between rounds before animating.
+                                    thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
+                                    markerListener();
+                                }, 2000, n_, animationMultiplier, map_);
+
 
                                 document.body.addEventListener("keypress", _keypress);
 
                                 function _keypress(e) {
                                     if (e.key === "]") {
-                                        t *= 2;
+                                        animationMultiplier *= 2;
                                         thisLineAnimation.clear();
-                                        thisLineAnimation = addAnimatedMarker(n_._coords, t, map_);
+                                        thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
                                         markerListener();
                                     } else if (e.key === "[") {
-                                        t /= 2;
+                                        animationMultiplier /= 2;
                                         thisLineAnimation.clear();
-                                        thisLineAnimation = addAnimatedMarker(n_._coords, t, map_);
+                                        thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
                                         markerListener();
                                     }
                                 }
