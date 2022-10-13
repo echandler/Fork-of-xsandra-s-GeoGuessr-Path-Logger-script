@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v18
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v18.5
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 18
+// @version 18.5
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -35,13 +35,7 @@ GM_menu.create();
 ///////////////// Detect google maps scripts //////////////////////////////////////////////
 
 let alertTimer = setTimeout(function(){
-    function isGamePage() {
-         // Duplicate from code below as a quick fix for a bug.
-        let s = location.pathname.startsWith.bind(location.pathname);
-        return s("/challenge/") || s("/results/") || s("/game/");
-    }
-
-    if (!isGamePage()) return;
+    if (!unsafeWindow.google) return;
 
     alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
 
