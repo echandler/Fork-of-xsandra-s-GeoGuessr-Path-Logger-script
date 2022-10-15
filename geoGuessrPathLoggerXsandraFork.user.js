@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v18.5
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v19
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 18.5
+// @version 19
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -17,7 +17,7 @@
 unsafeWindow.GM_menu = {
     id: null,
     create: function () {
-        let state = JSON.parse(localStorage["pathLoggerAnimation"] || 1);
+        let state = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
 
         if (GM_menu.id) {
             GM_unregisterMenuCommand(GM_menu.id);
@@ -52,41 +52,23 @@ window.googleMapsPromise = new Promise((resolve, reject) => {
                     if (node.tagName === "SCRIPT" && node.src.startsWith(MAPS_API_URL)) {
                         // When it’s been added and loaded, load the script below.
                         node.addEventListener("load", () => resolve()); // jshint ignore:line
+
                         clearTimeout(alertTimer);
+
                         if (scriptObserver) scriptObserver.disconnect();
+
                         scriptObserver = undefined;
                     }
                 }
             }
         });
 
-        // Wait for the head and body to be actually added to the page, applying the
-        // observer above to these elements directly.
-        // There are two separate observers because only the direct children of <head>
-        // and <body> should be watched, but these elements are not necessarily
-        // present at document-start.
-        let bodyDone = false;
-        let headDone = false;
-
-        new MutationObserver((_, observer) => {
-            if (!bodyDone && document.body) {
-                bodyDone = true;
-                if (scriptObserver)
-                    scriptObserver.observe(document.body, {
-                        childList: true,
-                    });
-            }
-            if (!headDone && document.head) {
-                headDone = true;
-                if (scriptObserver)
-                    scriptObserver.observe(document.head, {
-                        childList: true,
-                    });
-            }
-            if (headDone && bodyDone) observer.disconnect();
-        }).observe(document.documentElement, {
+        scriptObserver.observe(document.head, {
             childList: true,
-            subtree: true,
+        });
+
+        scriptObserver.observe(document.body, {
+            childList: true,
         });
 
     } catch (e) {
@@ -287,17 +269,22 @@ googleMapsPromise.then(() =>
 
                             ret.push(
                                 r.c.map(
-                                    (point) =>
-                                        new google.maps.Circle({
-                                            center: point,
-                                            radius: 4,
-                                            strokeColor: "rebeccapurple", //"#B40404",
-                                            strokeOpacity: 0.6,
-                                            strokeWeight: 0,
-                                            fillColor: "rebeccapurple", //"#B40404",
+                                    (point) => {
+                                        const lineSymbol = {
+                                            path: google.maps.SymbolPath.CIRCLE,
+                                            scale: 3,
+                                            fillColor: "rebeccapurple",// "#669933", //"#566895",
                                             fillOpacity: 0.6,
-                                        })
-                                )
+                                            // strokeColor: "#282c41",
+                                            // strokeOpacity: 1,
+                                            strokeWeight: 0,
+                                        };
+
+                                        return new google.maps.Marker({
+                                            position: point,
+                                            icon: lineSymbol,
+                                        });
+                                    } )
                             );
 
                             if (ret[0].length === 1 && ret[0][0]._coords[0].length <= 3) {
@@ -326,7 +313,7 @@ googleMapsPromise.then(() =>
 
                             n_.addListener("mouseover", function (e) {
                                 if (_infoWindow !== null) return;
-                                const state = JSON.parse(localStorage["pathLoggerAnimation"] || 1);
+                                const state = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
 
                                 const d = document.createElement("div");
                                 d.style.cssText = "color:black; font-size: 1.2em;";
@@ -335,8 +322,8 @@ googleMapsPromise.then(() =>
                                 const btn = document.createElement("button");
                                 btn.style.cssText = "display: block; margin-top: 1em;";
                                 btn.onclick = function (e) {
-                                    localStorage["pathLoggerAnimation"] = !JSON.parse(localStorage["pathLoggerAnimation"] || 1);
-                                    btn.innerText = JSON.parse(localStorage["pathLoggerAnimation"] || 1) == 1 ? "Turn auto play off" : "Turn auto play on";
+                                    localStorage["pathLoggerAnimation"] = !JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
+                                    btn.innerText = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1) == 1 ? "Turn auto play off" : "Turn auto play on";
                                     GM_menu.create();
                                 };
 
@@ -372,7 +359,7 @@ googleMapsPromise.then(() =>
                                 oldPolyLineSetMap.apply(n_, arguments);
                             };
 
-                            if (!thisLineAnimation && JSON.parse(localStorage["pathLoggerAnimation"] || 1)) {
+                            if (!thisLineAnimation && JSON.parse(localStorage["pathLoggerAnimation"] ?? 1)) {
                                 makeLineAnimation();
                             }
 
@@ -390,7 +377,7 @@ googleMapsPromise.then(() =>
 
                                 setTimeout(function(n_, animationMultiplier, map_){
                                     // Wait for the map to finish between rounds before animating.
-                                    thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
+                                    thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
                                     markerListener();
                                 }, startAnimationNow? 1: 2000, n_, animationMultiplier, map_);
 
@@ -401,12 +388,12 @@ googleMapsPromise.then(() =>
                                     if (e.key === "]") {
                                         animationMultiplier *= 2;
                                         thisLineAnimation.clear();
-                                        thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
+                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
                                         markerListener();
                                     } else if (e.key === "[") {
                                         animationMultiplier /= 2;
                                         thisLineAnimation.clear();
-                                        thisLineAnimation = addAnimatedMarker(n_._coords, animationMultiplier, map_);
+                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
                                         markerListener();
                                     }
                                 }
@@ -427,7 +414,7 @@ googleMapsPromise.then(() =>
             }
         }
 
-        function addAnimatedMarker(pathCoords_, multiplier_, map_) {
+        function createAnimatedMarker(pathCoords_, multiplier_, map_) {
             const lineSymbol = {
                 path: google.maps.SymbolPath.CIRCLE,
                 scale: 8,
@@ -439,9 +426,38 @@ googleMapsPromise.then(() =>
             };
 
             const marker = new google.maps.Marker({
+                draggable: true,
                 map: map_,
                 icon: lineSymbol,
             });
+
+            marker.addListener('drag', handleEventDrag);
+            marker.addListener('dragend', handleEventDragEnd);
+
+            function handleEventDrag(e){
+                cancelAnimation = true;
+            }
+
+            function handleEventDragEnd(e){
+                let lat = e.latLng.lat();
+                let lng = e.latLng.lng();
+                let d = 99999999999;
+                let p = 0;
+
+                for (let n = 0; n < frames.length; n++){
+
+                    const dist = Math.sqrt(Math.abs(lat - frames[n].lat()) ** 2 + Math.abs(lng - frames[n].lng()) ** 2);
+
+                    if (dist < d) {
+                        d = dist;
+                        p = n;
+                    }
+                }
+
+                index = p;
+                cancelAnimation = false;
+                requestAnimationFrame(animationCallback);
+            }
 
             const d = [];
             let totalDistance = 0;
@@ -508,6 +524,7 @@ googleMapsPromise.then(() =>
             frames.push(pathCoords_[pathCoords_.length - 1]); // Make sure last coord is on.
 
             let index = 0;
+            let cancelAnimation = false;
 
             function animationCallback() {
                 if (index >= frames.length) {
@@ -524,7 +541,9 @@ googleMapsPromise.then(() =>
 
                 marker.setPosition(frames[index++]);
 
-                requestAnimationFrame(animationCallback);
+                if (!cancelAnimation){
+                    requestAnimationFrame(animationCallback);
+                }
             }
 
             requestAnimationFrame(animationCallback);
