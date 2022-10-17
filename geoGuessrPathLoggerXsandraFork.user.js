@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v19.8
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v20
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 19.8
+// @version 20
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -113,7 +113,7 @@ googleMapsPromise.then(() =>
         // Keep a track of the start location for the current round, for detecting the return to start button
         let start = undefined;
 
-        let mapState = 0;
+        let mapState = {};
 
         //////////////// Modify google maps //////////////////////////////////////////////
 
@@ -177,10 +177,12 @@ googleMapsPromise.then(() =>
                     start = position;
                     route = { pathCoords: [], checkPointCoords: [] };
                     currentRound = roundID(); // TODO: Does this fix the bug for challenge links created by someone else (example: links from reddit)?
+                    distance = 0;
                 } else if (currentRound !== roundID()) {
                     currentRound = roundID();
                     start = position;
                     route = { pathCoords: [], checkPointCoords: [] };
+                    distance = 0;
                 }
 
                 // If we’re at the start, begin a new trace
@@ -188,11 +190,17 @@ googleMapsPromise.then(() =>
                     route.pathCoords.push([]);
                 }
 
-                const cur = route.pathCoords[route.pathCoords.length - 1];
+                let currRoute = route.pathCoords[route.pathCoords.length - 1];
+
+                // Calculate how far we have moved (not counting returns-to-start)
+                if (currRoute.length > 0) {
+                    distance += getDistance(position, currRoute[currRoute.length - 1]);
+                }
 
                 // Add the location to the trace
                 position.time = Date.now();
-                cur.push(position);
+
+                currRoute.push(position);
             } catch (e) {
                 console.error("GeoGuessr Path Logger Error:", e);
             }
@@ -207,9 +215,17 @@ googleMapsPromise.then(() =>
                     return;
                 }
 
-                // create a checksum of the game state, only updating the map when this changes, to save on computation
-                const newMapState = (resultShown() ? 10 : 0) + (singleResult() ? 20 : 0) + roundNumber();
-                if (newMapState == mapState) return;
+                // create a list of the game state indicators, only updating the map when this changes, to save on computation
+                const newMapState = {
+                    inGame: inGame,
+                    resultShown: resultShown(),
+                    singleResult: singleResult(),
+                    highscoreDetailsVisible: getRoundDistanceContainers().length > 0,
+                    roundNumber: roundNumber(),
+                };
+
+                if (Object.keys(newMapState).every((key) => mapState[key] === newMapState[key])) return;
+
                 mapState = newMapState;
 
                 // Hide all traces
@@ -223,7 +239,7 @@ googleMapsPromise.then(() =>
                         let pathData = getData();
 
                         const encodedRoutes = {
-                            p: route.pathCoords, //.map((path) => google.maps.geometry.encoding.encodePath(path.map((point) => new google.maps.LatLng(point)))),
+                            p: route.pathCoords,
                             c: route.checkPointCoords,
                             t: Date.now(),
                         };
@@ -231,6 +247,8 @@ googleMapsPromise.then(() =>
                         pathData[roundID()] = encodedRoutes;
 
                         saveData(pathData);
+
+                        setRoundDistance(distance);
                     }
 
                     inGame = false;
@@ -304,8 +322,6 @@ googleMapsPromise.then(() =>
                             let _infoWindow = null;
 
                             n_.setMap(map_);
-
-                            // if (!n_._coords) return; // Not a polyline.
 
                             n_.addListener("click", makeLineAnimation.bind(null, true));
 
@@ -411,6 +427,8 @@ googleMapsPromise.then(() =>
                             }
                         });
                     });
+
+                    calculateAndShowDistances(roundsToShow, distance);
                 }
             } catch (e) {
                 console.error("GeoGuessr Path Logger Error:", e);
@@ -477,7 +495,7 @@ googleMapsPromise.then(() =>
                 let incs = (to.time - from.time - 1000) / multiplier_ / (1000 / 60);
                 incs = incs > 150 ? 150 : incs;
 
-                //if (frames.length === 0) incs = 60; // Wait one second at start.
+                // if (frames.length === 0) incs = 60; // Wait one second at start.
 
                 for (let m = 0; m < incs; m++) {
                     // Wait time.
@@ -595,7 +613,132 @@ googleMapsPromise.then(() =>
             saveData(pathData);
         }
 
-        clearOldGames();
+        setTimeout(clearOldGames, 5000); // Old data may be needed by some other function possibly.
+
+        //////////////// Thanks to enigma_mf for distance calculating code. //////////////////
+        //////////////// https://discord.com/channels/730647011497607220/949511589365678120/1031334161664979055
+
+        // Keep a running total of the distance traveled on the current round.
+        let distance;
+
+        // Calculate the distance between two points
+        // I think I pulled this from an SO article
+
+        const rad = function (x) {
+            return (x * Math.PI) / 180;
+        };
+
+        const getDistance = function (p1, p2) {
+            const R = 6378137; // Earth’s mean radius in meters
+            const dLat = rad(p2.lat - p1.lat);
+            const dLong = rad(p2.lng - p1.lng);
+            const angle = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(rad(p1.lat)) * Math.cos(rad(p2.lat)) * Math.sin(dLong / 2) * Math.sin(dLong / 2);
+            return 2 * R * Math.atan2(Math.sqrt(angle), Math.sqrt(1 - angle));
+        };
+
+        // Record the distance traveled during a round
+        const setRoundDistance = (distance) => {
+            const distances = JSON.parse(localStorage.distances || "{}");
+            distances[roundID()] = distance;
+            localStorage.distances = JSON.stringify(distances);
+        };
+
+        // Get the recorded distance for the given roundID
+        const getRoundDistance = (key) => {
+            const distances = JSON.parse(localStorage.distances || "{}");
+            return parseFloat(distances[key]);
+        };
+
+        // Find the round detail cell on the challenge highscore page
+        const getRoundDistanceContainer = (roundID) => {
+            const index = parseInt(roundID.split("-")[1]);
+            const rounds = getRoundDistanceContainers();
+
+            if (rounds.length < index) return null;
+
+            return rounds[index - 1];
+        };
+
+        // Get a list of the player's result details containers
+        const getRoundDistanceContainers = () => {
+            return document.querySelectorAll(".results-highscore__guess-cell--round.results-highscore__cell--selected .results-highscore__guess-cell-details");
+        };
+
+        // Find the appropriate place to insert the distance traveled for the current page
+        const getDistanceContainer = () => {
+            const candidates = [
+                "[data-qa=guess-description]", // Round summary text
+                "[data-qa=final-result-score]", // Game summary text
+                "[data-qa=score-description]", // Streak summary text, post-redesign
+                ".score-bar__label", // Finds the single-round and game summary text
+                ".results-highscore__guess-cell--total.results-highscore__cell--selected .results-highscore__guess-cell-details",
+                // Finds the 'Total' cell on the challenge highscore page
+                ".streak-result__sub-title", // Finds the streak summary text
+            ];
+
+            let result = null;
+            for (var i = 0; i < candidates.length; i++) {
+                result = document.querySelector(candidates[i]);
+                if (result != null) break;
+            }
+            return result;
+        };
+
+        // Inject or update a span with the distance travelled
+        const displayDistance = (container, distance, separator = " ") => {
+            if (container == null) {
+                return;
+            }
+
+            let target = container.querySelector(".ggpl_distance");
+            if (target == null) {
+                target = document.createElement("span");
+                target.classList.add("ggpl_distance");
+                container.appendChild(target);
+            }
+            var scale = "m";
+            if (distance > 1000) {
+                scale = "km";
+                distance = distance / 1000;
+            }
+            target.innerText = separator + "You traveled " + distance.toFixed(1) + " " + scale;
+        };
+
+        function calculateAndShowDistances(roundsToShow, distance) {
+            var totalDistance = 0;
+
+            roundsToShow.forEach((key) => {
+                let distance = getRoundDistance(key);
+
+                // 0 or NaN
+                if (!(distance > 0)) return;
+
+                totalDistance += distance;
+
+                var target = getRoundDistanceContainer(key);
+                if (target != null) displayDistance(target, distance, " - ");
+            });
+
+            if (totalDistance > 0) displayDistance(getDistanceContainer(), totalDistance);
+        }
+
+        // Remove all distances older than a week
+        function clearOldDistances() {
+            let pathData = getData();
+            let keys = Object.keys(pathData);
+
+            // Delete all distances older than a week
+            const cutoff = Date.now() - KEEP_FOR;
+            for (const [gameID, data] of Object.entries(pathData)) {
+                if (data.t < cutoff) {
+                    delete localStorage.distances[gameID];
+                }
+            }
+
+            saveData(pathData);
+        }
+
+        setTimeout(clearOldDistances, 1000);
 
         //////////////// Utility functions //////////////////////////////////////////////
 
