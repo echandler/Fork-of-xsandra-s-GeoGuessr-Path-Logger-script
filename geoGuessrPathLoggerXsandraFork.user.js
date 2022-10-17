@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v19
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v19.8
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 19
+// @version 19.8
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -34,11 +34,10 @@ GM_menu.create();
 
 ///////////////// Detect google maps scripts //////////////////////////////////////////////
 
-let alertTimer = setTimeout(function(){
+let alertTimer = setTimeout(function () {
     if (!unsafeWindow.google) return;
 
     alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
-
 }, 2000);
 
 const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";
@@ -70,7 +69,6 @@ window.googleMapsPromise = new Promise((resolve, reject) => {
         scriptObserver.observe(document.body, {
             childList: true,
         });
-
     } catch (e) {
         alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
         // Promise will not short ciruit if reject is called.
@@ -193,6 +191,7 @@ googleMapsPromise.then(() =>
                 const cur = route.pathCoords[route.pathCoords.length - 1];
 
                 // Add the location to the trace
+                position.time = Date.now();
                 cur.push(position);
             } catch (e) {
                 console.error("GeoGuessr Path Logger Error:", e);
@@ -224,7 +223,7 @@ googleMapsPromise.then(() =>
                         let pathData = getData();
 
                         const encodedRoutes = {
-                            p: route.pathCoords.map((path) => google.maps.geometry.encoding.encodePath(path.map((point) => new google.maps.LatLng(point)))),
+                            p: route.pathCoords, //.map((path) => google.maps.geometry.encoding.encodePath(path.map((point) => new google.maps.LatLng(point)))),
                             c: route.checkPointCoords,
                             t: Date.now(),
                         };
@@ -249,7 +248,7 @@ googleMapsPromise.then(() =>
 
                             ret.push(
                                 r.p.map((_polyline) => {
-                                    let coords = google.maps.geometry.encoding.decodePath(_polyline);
+                                    let coords = _polyline; //google.maps.geometry.encoding.decodePath(_polyline);
 
                                     pathCoords.push(coords);
 
@@ -268,23 +267,22 @@ googleMapsPromise.then(() =>
                             );
 
                             ret.push(
-                                r.c.map(
-                                    (point) => {
-                                        const lineSymbol = {
-                                            path: google.maps.SymbolPath.CIRCLE,
-                                            scale: 3,
-                                            fillColor: "rebeccapurple",// "#669933", //"#566895",
-                                            fillOpacity: 0.6,
-                                            // strokeColor: "#282c41",
-                                            // strokeOpacity: 1,
-                                            strokeWeight: 0,
-                                        };
+                                r.c.map((point) => {
+                                    const lineSymbol = {
+                                        path: google.maps.SymbolPath.CIRCLE,
+                                        scale: 3,
+                                        fillColor: "rebeccapurple", // "#669933", //"#566895",
+                                        fillOpacity: 0.6,
+                                        // strokeColor: "#282c41",
+                                        // strokeOpacity: 1,
+                                        strokeWeight: 0,
+                                    };
 
-                                        return new google.maps.Marker({
-                                            position: point,
-                                            icon: lineSymbol,
-                                        });
-                                    } )
+                                    return new google.maps.Marker({
+                                        position: point,
+                                        icon: lineSymbol,
+                                    });
+                                })
                             );
 
                             if (ret[0].length === 1 && ret[0][0]._coords[0].length <= 3) {
@@ -307,7 +305,7 @@ googleMapsPromise.then(() =>
 
                             n_.setMap(map_);
 
-                           // if (!n_._coords) return; // Not a polyline.
+                            // if (!n_._coords) return; // Not a polyline.
 
                             n_.addListener("click", makeLineAnimation.bind(null, true));
 
@@ -373,14 +371,19 @@ googleMapsPromise.then(() =>
                                     return;
                                 }
 
-                                thisLineAnimation = 'waiting';
+                                thisLineAnimation = "waiting";
 
-                                setTimeout(function(n_, animationMultiplier, map_){
-                                    // Wait for the map to finish between rounds before animating.
-                                    thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
-                                    markerListener();
-                                }, startAnimationNow? 1: 2000, n_, animationMultiplier, map_);
-
+                                setTimeout(
+                                    function (n_, animationMultiplier, map_) {
+                                        // Wait for the map to finish between rounds before animating.
+                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
+                                        markerListener();
+                                    },
+                                    startAnimationNow ? 1 : 2000,
+                                    n_,
+                                    animationMultiplier,
+                                    map_
+                                );
 
                                 document.body.addEventListener("keypress", _keypress);
 
@@ -431,22 +434,21 @@ googleMapsPromise.then(() =>
                 icon: lineSymbol,
             });
 
-            marker.addListener('drag', handleEventDrag);
-            marker.addListener('dragend', handleEventDragEnd);
+            marker.addListener("drag", handleEventDrag);
+            marker.addListener("dragend", handleEventDragEnd);
 
-            function handleEventDrag(e){
+            function handleEventDrag(e) {
                 cancelAnimation = true;
             }
 
-            function handleEventDragEnd(e){
+            function handleEventDragEnd(e) {
                 let lat = e.latLng.lat();
                 let lng = e.latLng.lng();
                 let d = 99999999999;
                 let p = 0;
 
-                for (let n = 0; n < frames.length; n++){
-
-                    const dist = Math.sqrt(Math.abs(lat - frames[n].lat()) ** 2 + Math.abs(lng - frames[n].lng()) ** 2);
+                for (let n = 0; n < frames.length; n++) {
+                    const dist = Math.sqrt(Math.abs(lat - frames[n].lat) ** 2 + Math.abs(lng - frames[n].lng) ** 2);
 
                     if (dist < d) {
                         d = dist;
@@ -459,69 +461,47 @@ googleMapsPromise.then(() =>
                 requestAnimationFrame(animationCallback);
             }
 
-            const d = [];
-            let totalDistance = 0;
-
             pathCoords_ = pathCoords_.flatMap((x) => x);
-
-            let p = 0;
-
-            for (let n = 0; n < pathCoords_.length; n++) {
-                if (n + 1 >= pathCoords_.length) continue;
-
-                const start = pathCoords_[n];
-                const finish = pathCoords_[n + 1];
-                const lineLength = Math.sqrt(Math.abs(start.lat() - finish.lat()) ** 2 + Math.abs(start.lng() - finish.lng()) ** 2);
-
-                totalDistance += lineLength;
-
-                if (lineLength > 0.001) {
-                    // This line is assumed to be a jump to teleport to start or something like that.
-                    totalDistance -= lineLength;
-                    p += 3;
-                }
-
-                d.push(lineLength);
-            }
-
-            const oneMeter = 0.00001; /*1.111 meters*/
-
-            let spd = totalDistance / (oneMeter * 150);
-            spd = spd < 6 ? 6 + p : spd; // Short routes should run slower.
-
-            const speed = (totalDistance / oneMeter / spd) * multiplier_;
 
             const frames = [];
 
-            let fromLat = pathCoords_[0].lat();
-            let fromLng = pathCoords_[0].lng();
+            let from = pathCoords_[0];
 
-            for (let n = 0; n < d.length; n++) {
+            for (let n = 1; n < pathCoords_.length; n++) {
                 // One frame = one set of lat lng coords.
 
-                if (n + 1 >= pathCoords_.length) continue;
+                if (n >= pathCoords_.length) break;
 
-                const toLat = pathCoords_[n + 1].lat();
-                const toLng = pathCoords_[n + 1].lng();
+                const to = pathCoords_[n];
 
-                let incs = Math.ceil((d[n] / oneMeter / speed) * 60);
+                let incs = (to.time - from.time - 1000) / multiplier_ / (1000 / 60);
+                incs = incs > 150 ? 150 : incs;
 
-                if (d[n] > 0.001) {
-                    // Speed up for long distances. Could be teleporting to start.
-                    incs = Math.ceil((d[n] / oneMeter / (speed * 10)) * 60);
-                }
+                //if (frames.length === 0) incs = 60; // Wait one second at start.
 
                 for (let m = 0; m < incs; m++) {
-                    const curLat = fromLat + (m / incs) * (toLat - fromLat);
-                    const curLng = fromLng + (m / incs) * (toLng - fromLng);
-                    frames.push(new google.maps.LatLng(curLat, curLng));
+                    // Wait time.
+                    frames.push({ lat: from.lat, lng: from.lng, wait: true });
                 }
 
-                fromLat = toLat;
-                fromLng = toLng;
+                incs = 16 / multiplier_;
+
+                for (let m = 0; m < incs + 1; m++) {
+                    // Move from one point to next.
+                    const curLat = from.lat + (m / incs) * (to.lat - from.lat);
+                    const curLng = from.lng + (m / incs) * (to.lng - from.lng);
+                    frames.push({ lat: curLat, lng: curLng });
+                }
+
+                from = to;
             }
 
-            frames.push(pathCoords_[pathCoords_.length - 1]); // Make sure last coord is on.
+            for (let m = 0; m < 50; m++) {
+                // Additional wait time at end.
+                frames.push({ lat: from.lat, lng: from.lng });
+            }
+
+            frames[0].wait = false; // Make sure first frame shows marker in animation.
 
             let index = 0;
             let cancelAnimation = false;
@@ -539,9 +519,13 @@ googleMapsPromise.then(() =>
                     return;
                 }
 
-                marker.setPosition(frames[index++]);
+                if (!frames[index].wait) {
+                    marker.setPosition(frames[index]);
+                }
 
-                if (!cancelAnimation){
+                index++;
+
+                if (!cancelAnimation) {
                     requestAnimationFrame(animationCallback);
                 }
             }
@@ -551,7 +535,7 @@ googleMapsPromise.then(() =>
             return {
                 clear: () => {
                     marker.setMap(null);
-                    animationCallback = null;
+                    cancelAnimation = true;
                 },
                 marker: marker,
             };
@@ -664,4 +648,3 @@ googleMapsPromise.then(() =>
         }
     })
 );
-
