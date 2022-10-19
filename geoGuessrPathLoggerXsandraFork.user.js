@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v20
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v21
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 20
+// @version 21
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -474,7 +474,7 @@ googleMapsPromise.then(() =>
                     }
                 }
 
-                index = p;
+                frameIdx = p;
                 cancelAnimation = false;
                 requestAnimationFrame(animationCallback);
             }
@@ -488,24 +488,24 @@ googleMapsPromise.then(() =>
             for (let n = 1; n < pathCoords_.length; n++) {
                 // One frame = one set of lat lng coords.
 
-                if (n >= pathCoords_.length) break;
-
                 const to = pathCoords_[n];
 
-                let incs = (to.time - from.time - 1000) / multiplier_ / (1000 / 60);
-                incs = incs > 150 ? 150 : incs;
+                let incs = (to.time - from.time - 1000 /*milliseconds*/) / multiplier_ / (1000 / 60) /*16 frames per second*/;
+                incs = incs > 150 / multiplier_ ? 150 / multiplier_ : Math.ceil(incs); // 150 frames should be about 2500ms.
 
-                // if (frames.length === 0) incs = 60; // Wait one second at start.
+                // Make the animation run faster at the beginning.
+                if (frames.length < (16 / multiplier_) * 2 + 20 * 2) incs = 20;
 
                 for (let m = 0; m < incs; m++) {
-                    // Wait time.
+                    // Each frame will be same position so that it will look like the
+                    // animation is pausing where the player stopped and looked around.
                     frames.push({ lat: from.lat, lng: from.lng, wait: true });
                 }
 
-                incs = 16 / multiplier_;
+                incs = Math.ceil(16 / multiplier_);
 
                 for (let m = 0; m < incs + 1; m++) {
-                    // Move from one point to next.
+                    // Calculate frames to move from one point to next.
                     const curLat = from.lat + (m / incs) * (to.lat - from.lat);
                     const curLng = from.lng + (m / incs) * (to.lng - from.lng);
                     frames.push({ lat: curLat, lng: curLng });
@@ -514,34 +514,29 @@ googleMapsPromise.then(() =>
                 from = to;
             }
 
-            for (let m = 0; m < 50; m++) {
-                // Additional wait time at end.
-                frames.push({ lat: from.lat, lng: from.lng });
-            }
-
             frames[0].wait = false; // Make sure first frame shows marker in animation.
 
-            let index = 0;
+            let frameIdx = 0;
             let cancelAnimation = false;
 
             function animationCallback() {
-                if (index >= frames.length) {
-                    index = 0;
+                if (frameIdx >= frames.length) {
+                    frameIdx = 0;
 
                     setTimeout(() => {
                         // Pause at end then go to start.
-                        marker.setPosition(frames[index++]);
+                        marker.setPosition(frames[frameIdx++]);
                         setTimeout(() => requestAnimationFrame(animationCallback), 600);
-                    }, 1000);
+                    }, 2500);
 
                     return;
                 }
 
-                if (!frames[index].wait) {
-                    marker.setPosition(frames[index]);
+                if (!frames[frameIdx].wait) {
+                    marker.setPosition(frames[frameIdx]);
                 }
 
-                index++;
+                frameIdx++;
 
                 if (!cancelAnimation) {
                     requestAnimationFrame(animationCallback);
