@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v21
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v24
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 21
+// @version 24
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -36,7 +36,6 @@ GM_menu.create();
 
 let alertTimer = setTimeout(function () {
     if (!unsafeWindow.google) return;
-
     alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
 }, 2000);
 
@@ -91,8 +90,6 @@ window.runAsClient = runAsClient;
 
 googleMapsPromise.then(() =>
     runAsClient(() => {
-        debugger;
-
         let g_SVObject = null;
 
         const google = window.google;
@@ -230,6 +227,7 @@ googleMapsPromise.then(() =>
 
                 // Hide all traces
                 pathStuff.forEach((m) => m.forEach((n_) => n_.setMap(null)));
+                pathStuff = [];
 
                 // If we’re looking at the results, draw the traces again
                 if (resultShown()) {
@@ -238,13 +236,18 @@ googleMapsPromise.then(() =>
                         // encode the route to reduce the storage required.
                         let pathData = getData();
 
+                        if (!pathData[id()]) {
+                            pathData[id()] = { rounds: [] };
+                        }
+
                         const encodedRoutes = {
                             p: route.pathCoords,
                             c: route.checkPointCoords,
-                            t: Date.now(),
                         };
 
-                        pathData[roundID()] = encodedRoutes;
+                        pathData[id()].rounds[roundNumber()] = encodedRoutes;
+
+                        pathData[id()].t = Date.now();
 
                         saveData(pathData);
 
@@ -252,40 +255,62 @@ googleMapsPromise.then(() =>
                     }
 
                     inGame = false;
+
                     // Show all rounds for the current game when viewing the full results
-                    const pathData = getData();
-                    const roundsToShow = singleResult() ? [roundID()] : Object.keys(pathData).filter((map) => map.startsWith(id()));
+                    let pathData = getData();
+                    pathData = pathData[id()];
 
-                    pathStuff = roundsToShow
-                        .map((key) => pathData[key]) // Get the map for this round
-                        .filter((r) => r) // Ignore missing rounds
-                        .map((r) => {
-                            let ret = [];
+                    if (singleResult()) {
+                        pathData = { rounds: [pathData.rounds[roundNumber()]] };
+                    }
 
-                            const pathCoords = [];
+                    const roundsToShow = singleResult() ? [id()] : Object.keys(pathData).filter((map) => map.startsWith(id()));
 
-                            ret.push(
-                                r.p.map((_polyline) => {
-                                    let coords = _polyline; //google.maps.geometry.encoding.decodePath(_polyline);
+                    pathStuff = rr(pathData, map_);
 
-                                    pathCoords.push(coords);
+                    calculateAndShowDistances(roundsToShow, distance);
+                }
+            } catch (e) {
+                console.error("GeoGuessr Path Logger Error:", e);
+            }
+        }
 
-                                    let line = new google.maps.Polyline({
-                                        path: coords, //google.maps.geometry.encoding.decodePath(polyline),
-                                        geodesic: true,
-                                        strokeColor: "rebeccapurple", //'#FF0000',
-                                        strokeOpacity: 1.0,
-                                        strokeWeight: 3,
-                                    });
+        function rr(pathData, map_) {
+            let ret = pathData.rounds
+                .filter((r) => r) // Ignore missing rounds
+                .map((r) => {
+                    let _ret = [];
 
-                                    line._coords = pathCoords;
+                    const pathCoords = [];
 
-                                    return line;
-                                })
-                            );
+                    _ret.push(
+                        r.p
+                            .map((_polyline) => {
+                                let coords = _polyline; //google.maps.geometry.encoding.decodePath(_polyline);
 
-                            ret.push(
-                                r.c.map((point) => {
+                                pathCoords.push(coords);
+
+                                let line = new google.maps.Polyline({
+                                    path: coords, //google.maps.geometry.encoding.decodePath(polyline),
+                                    geodesic: true,
+                                    strokeColor: "rebeccapurple", //'#FF0000',
+                                    strokeOpacity: 1.0,
+                                    strokeWeight: 3,
+                                });
+
+                                line._coords = pathCoords;
+
+                                return line;
+                            })
+                            .flat()
+                    );
+
+                    if (r.c) {
+                        // Has checkpoints
+                        _ret.push(
+                            r.c
+                                .map((point) => {
+                                    //  r.c.map((point) => {
                                     const lineSymbol = {
                                         path: google.maps.SymbolPath.CIRCLE,
                                         scale: 3,
@@ -301,140 +326,335 @@ googleMapsPromise.then(() =>
                                         icon: lineSymbol,
                                     });
                                 })
-                            );
+                                .flat()
+                        );
+                    }
 
-                            if (ret[0].length === 1 && ret[0][0]._coords[0].length <= 3) {
-                                // Player probably didn't move, maybe photoshere.
-                                return [];
-                            }
+                    if (_ret[0].length === 1 && _ret[0][0]._coords[0].length <= 3) {
+                        // Player probably didn't move, maybe photoshere.
+                        return [];
+                    }
 
-                            ret = ret.flatMap((x) => x); // For breakpoint in devtools.
+                    _ret = _ret.flatMap((x) => x); // For breakpoint in devtools.
 
-                            return ret;
-                        });
+                    return _ret;
+                });
 
-                    // Add all traces to the map
+            // Add all traces to the map
+            debugger;
+            ret.forEach((pathOrChkpntArray) => {
+                let thisLineAnimation = null;
 
-                    pathStuff.forEach((m_) => {
-                        let thisLineAnimation = null;
+                pathOrChkpntArray.forEach((pathOrChkpnt) => {
+                    let _infoWindow = null;
 
-                        m_.forEach((n_) => {
-                            let _infoWindow = null;
+                    pathOrChkpnt.setMap(map_);
 
-                            n_.setMap(map_);
+                    pathOrChkpnt.addListener("click", function (e) {
+                        console.log(e);
+                        if (e.domEvent.shiftKey) {
+                            const latLng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                            const coords = pathOrChkpnt._coords.flat();
+                            const loc = coords.reduce((prev, cur) => {
+                                const dist1 = prev.dist || Math.sqrt(Math.abs(latLng.lat - prev.lat) ** 2 + Math.abs(latLng.lng - prev.lng) ** 2);
+                                const dist2 = Math.sqrt(Math.abs(latLng.lat - cur.lat) ** 2 + Math.abs(latLng.lng - cur.lng) ** 2);
 
-                            n_.addListener("click", makeLineAnimation.bind(null, true));
-
-                            n_.addListener("mouseover", function (e) {
-                                if (_infoWindow !== null) return;
-                                const state = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
-
-                                const d = document.createElement("div");
-                                d.style.cssText = "color:black; font-size: 1.2em;";
-                                d.innerHTML = '<span>Click line to start animation. Press "[" or "]" to change speed.<span>';
-
-                                const btn = document.createElement("button");
-                                btn.style.cssText = "display: block; margin-top: 1em;";
-                                btn.onclick = function (e) {
-                                    localStorage["pathLoggerAnimation"] = !JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
-                                    btn.innerText = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1) == 1 ? "Turn auto play off" : "Turn auto play on";
-                                    GM_menu.create();
-                                };
-
-                                btn.innerText = state == 1 ? "Turn auto play off" : "Turn auto play on";
-                                d.appendChild(btn);
-
-                                _infoWindow = setTimeout(function () {
-                                    _infoWindow = new google.maps.InfoWindow({
-                                        content: d,
-                                        position: e.latLng,
-                                    });
-
-                                    _infoWindow.open(map_);
-
-                                    setTimeout(() => {
-                                        _infoWindow.close();
-                                        _infoWindow = null;
-                                    }, 5000);
-                                }, 2000);
+                                return dist1 < dist2 ? { ...prev, dist: dist1 } : { ...cur, dist: dist2 };
                             });
 
-                            n_.addListener("mouseout", function (e) {
-                                clearTimeout(_infoWindow);
-                                if (typeof _infoWindow === "number") _infoWindow = null;
-                            });
+                            setTimeout(function () {
+                                // This fixes a problem were "_blank" doesn't open in new tab. Not sure why.
+                                window.open(`https://www.google.com/maps?q&layer=c&cbll=${loc.lat},${loc.lng}`, "_blank");
+                            }, 1);
 
-                            const oldPolyLineSetMap = n_.setMap;
-                            n_.setMap = function () {
-                                if (thisLineAnimation) {
-                                    thisLineAnimation.clear();
-                                    thisLineAnimation = null;
-                                }
-                                oldPolyLineSetMap.apply(n_, arguments);
+                            return;
+                        }
+
+                        makeLineAnimation.call(null, true);
+                    });
+
+                    pathOrChkpnt.addListener("mouseover", function (e) {
+                        if (_infoWindow !== null) return;
+
+                        _infoWindow = setTimeout(function () {
+                            const state = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
+
+                            const d = document.createElement("div");
+                            d.style.cssText = "color:black; font-size: 1.2em;";
+                            d.innerHTML = `<span>Click line to start animation.</span><br>
+                                                        <span>Press "[" or "]" to change speed.</span><br>
+                                                        <span>Hold shift key and click on line to open nearest point in Google Maps.</span>
+                                        `;
+
+                            const btnContainer = document.createElement("div");
+                            d.appendChild(btnContainer);
+
+                            const btn = document.createElement("button");
+                            btn.style.cssText = "margin-top: 1em; margin-right: 1em;";
+                            btn.onclick = function (e) {
+                                localStorage["pathLoggerAnimation"] = !JSON.parse(localStorage["pathLoggerAnimation"] ?? 1);
+                                btn.innerText = JSON.parse(localStorage["pathLoggerAnimation"] ?? 1) == 1 ? "Turn auto play off" : "Turn auto play on";
+                                GM_menu.create();
                             };
 
-                            if (!thisLineAnimation && JSON.parse(localStorage["pathLoggerAnimation"] ?? 1)) {
-                                makeLineAnimation();
+                            btn.innerText = state == 1 ? "Turn auto play off" : "Turn auto play on";
+                            btnContainer.appendChild(btn);
+
+                            const pathData = getData();
+                            const isUploaded = pathData[id()].uploaded === true;
+
+                            const fireBaseUrl = "https://pathloggerapi-default-rtdb.firebaseio.com/games/";
+
+                            const uploadBtn = document.createElement("button");
+                            uploadBtn.innerText = isUploaded ? "View game traces" : "Upload game traces";
+                            uploadBtn.style.cssText = "margin-top: 1em;";
+
+                            btnContainer.appendChild(uploadBtn);
+
+                            uploadBtn.disabled = singleResult() || !isChallenge() ? true : false;
+
+                            uploadBtn.addEventListener("click", isUploaded ? clickViewTraces : clickUploadTraces);
+
+                            async function clickViewTraces() {
+                                uploadBtn.disabled = true;
+
+                                _infoWindow.setMap(null);
+                                _infoWindow = null;
+
+                                let list = await fetch(fireBaseUrl + id() + ".json?shallow=true").then((res) => res.json());
+
+                                let menu = createMenu();
+
+                                if (!menu) return;
+
+                                const refreshBtn = document.createElement("button");
+                                refreshBtn.innerText = "Refresh";
+                                refreshBtn.style.cssText = "display: block; margin: 0px auto; width: fit-content; cursor: pointer;";
+                                refreshBtn.addEventListener("click", async function () {
+                                    let list1 = await fetch(fireBaseUrl + id() + ".json?shallow=true").then((res) => res.json());
+                                    //menu.container.parentElement.removeChild(menu.container);
+                                    for (let playerName in list1) {
+                                        if (playerName === "t_i_m_e" || list[playerName]) continue;
+
+                                        list[playerName] = true;
+                                        makeLi(playerName);
+                                    }
+                                });
+
+                                menu.header.innerHTML = "";
+                                menu.header.appendChild(refreshBtn);
+
+                                let ul = document.createElement("ul");
+                                ul.style.cssText = "margin: 10px; padding-left: 0px; list-style: none;";
+                                ul._highlighted = null;
+
+                                for (let playerName in list) {
+                                    if (playerName === "t_i_m_e") continue;
+                                    makeLi(playerName);
+                                }
+
+                                menu.body.appendChild(ul);
+
+                                function makeLi(playerName) {
+                                    const li = document.createElement("LI");
+                                    li.innerHTML = playerName;
+                                    li.style.cssText = "padding: 10px; cursor: pointer;width: fit-content; margin: 0px auto;";
+                                    ul.appendChild(li);
+
+                                    li.addEventListener("click", async function () {
+                                        if (ul._highlighted === li) return;
+
+                                        let coords = li._coords || (await fetch(fireBaseUrl + id() + "/" + playerName + ".json").then((res) => res.json()));
+
+                                        if (!li._coords) {
+                                            li._coords = coords;
+                                        }
+
+                                        if (ul._highlighted) {
+                                            ul._highlighted.style.backgroundColor = "";
+                                        }
+
+                                        li.style.backgroundColor = "yellow";
+
+                                        ul._highlighted = li;
+
+                                        ret.forEach((m) => m.forEach((n_) => n_.setMap(null)));
+
+                                        rr({ rounds: coords }, map_);
+                                    });
+                                }
+                                // menu.body.innerHTML = Object.keys(list);
                             }
 
-                            function makeLineAnimation(startAnimationNow) {
-                                let animationMultiplier = 1;
+                            async function clickUploadTraces() {
+                                uploadBtn.disabled = true;
+                                _infoWindow.setMap(null);
+                                _infoWindow = null;
 
-                                if (thisLineAnimation) {
-                                    thisLineAnimation.clear();
-                                    thisLineAnimation = null;
-                                    document.body.removeEventListener("keypress", _keypress);
+                                const pathData = getData();
+
+                                if (pathData[id()].uploaded === true) {
+                                    alert("Traces has alread been uploaded.");
+                                    // return;
+                                }
+
+                                //       const roundsToShow = singleResult() ? [roundID()] : Object.keys(pathData).filter((map) => map.startsWith(id()));
+
+                                const savedName = localStorage["pathloggerName"] || "";
+                                const playerName = prompt("Enter name you would like displayed to other players:", savedName);
+
+                                if (!playerName) {
+                                    alert("Please try again.");
                                     return;
                                 }
 
-                                thisLineAnimation = "waiting";
-
-                                setTimeout(
-                                    function (n_, animationMultiplier, map_) {
-                                        // Wait for the map to finish between rounds before animating.
-                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
-                                        markerListener();
-                                    },
-                                    startAnimationNow ? 1 : 2000,
-                                    n_,
-                                    animationMultiplier,
-                                    map_
-                                );
-
-                                document.body.addEventListener("keypress", _keypress);
-
-                                function _keypress(e) {
-                                    if (e.key === "]") {
-                                        animationMultiplier *= 2;
-                                        thisLineAnimation.clear();
-                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
-                                        markerListener();
-                                    } else if (e.key === "[") {
-                                        animationMultiplier /= 2;
-                                        thisLineAnimation.clear();
-                                        thisLineAnimation = createAnimatedMarker(n_._coords, animationMultiplier, map_);
-                                        markerListener();
-                                    }
+                                if (playerName.length > 20) {
+                                    alert("Name needs to be less than 20 characters.");
+                                    return;
                                 }
 
-                                function markerListener() {
-                                    thisLineAnimation.marker.addListener("click", function () {
-                                        thisLineAnimation.clear();
-                                        thisLineAnimation = null;
-                                        document.body.removeEventListener("keypress", _keypress);
+                                const checkName = await fetch(fireBaseUrl + id() + "/" + playerName + ".json")
+                                    .then((res) => res.json())
+                                    .catch((error) => {
+                                        console.error(error);
+                                        return { error: error };
                                     });
+
+                                if (checkName != null || checkName?.error) {
+                                    alert("Try a different name. However, there may be a problem with the database, but probably not.");
+
+                                    if (checkName.error) alert(checkName.error);
+
+                                    return;
                                 }
+
+                                localStorage["pathloggerName"] = playerName;
+
+                                let requestOptions = {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                        [playerName]: pathData[id()].rounds,
+                                        t_i_m_e: Date.now(),
+                                    }),
+                                };
+
+                                fetch(fireBaseUrl + id() + ".json", requestOptions)
+                                    .then((response) => response.json())
+                                    .then((json) => console.log(json))
+                                    .catch((error) => alert(error));
+
+                                pathData[id()].uploaded = true;
+
+                                saveData(pathData);
                             }
-                        });
+
+                            d.addEventListener("mousedown", () => {
+                                // Infowindows don't "do" mousedown events.
+                                let removeInfoWindowEvent = map_.addListener("idle", function () {
+                                    if (_infoWindow) {
+                                        _infoWindow.setMap(null);
+                                        _infoWindow = null;
+                                    }
+                                    google.maps.event.removeListener(removeInfoWindowEvent);
+                                });
+
+                                clearTimeout(p);
+                            });
+
+                            _infoWindow = new google.maps.InfoWindow({
+                                content: d,
+                                position: e.latLng,
+                            });
+
+                            _infoWindow.open(map_);
+
+                            _infoWindow.addListener("closeclick", function () {
+                                _infoWindow = null;
+                            });
+
+                            let p = setTimeout(() => {
+                                _infoWindow.close();
+                                _infoWindow = null;
+                            }, 5000);
+                        }, 2000);
                     });
 
-                    calculateAndShowDistances(roundsToShow, distance);
-                }
-            } catch (e) {
-                console.error("GeoGuessr Path Logger Error:", e);
-            }
-        }
+                    pathOrChkpnt.addListener("mouseout", function (e) {
+                        clearTimeout(_infoWindow);
+                        if (typeof _infoWindow === "number") _infoWindow = null;
+                    });
 
+                    const oldPolyLineSetMap = pathOrChkpnt.setMap;
+                    pathOrChkpnt.setMap = function () {
+                        if (thisLineAnimation) {
+                            thisLineAnimation.clear();
+                            thisLineAnimation = null;
+                        }
+                        oldPolyLineSetMap.apply(pathOrChkpnt, arguments);
+                    };
+
+                    if (!thisLineAnimation && JSON.parse(localStorage["pathLoggerAnimation"] ?? 1)) {
+                        makeLineAnimation();
+                    }
+
+                    function makeLineAnimation(startAnimationNow) {
+                        let animationMultiplier = 1;
+
+                        if (thisLineAnimation) {
+                            thisLineAnimation.clear();
+                            thisLineAnimation = null;
+                            document.body.removeEventListener("keypress", _keypress);
+                            return;
+                        }
+
+                        const createAnimatedMarkerTimer = setTimeout(
+                            function (pathOrChkpnt, animationMultiplier, map_) {
+                                // Wait for the map to finish between rounds before animating.
+                                thisLineAnimation = createAnimatedMarker(pathOrChkpnt._coords, animationMultiplier, map_);
+                                markerListener();
+                            },
+                            startAnimationNow ? 1 : 2000,
+                            pathOrChkpnt,
+                            animationMultiplier,
+                            map_
+                        );
+
+                        thisLineAnimation = {
+                            clear: function () {
+                                clearTimeout(createAnimatedMarkerTimer);
+                            },
+                        };
+
+                        document.body.addEventListener("keypress", _keypress);
+
+                        function _keypress(e) {
+                            if (e.key === "]") {
+                                animationMultiplier *= 2;
+                                thisLineAnimation.clear();
+                                thisLineAnimation = createAnimatedMarker(pathOrChkpnt._coords, animationMultiplier, map_);
+                                markerListener();
+                            } else if (e.key === "[") {
+                                animationMultiplier /= 2;
+                                thisLineAnimation.clear();
+                                thisLineAnimation = createAnimatedMarker(pathOrChkpnt._coords, animationMultiplier, map_);
+                                markerListener();
+                            }
+                        }
+
+                        function markerListener() {
+                            thisLineAnimation.marker.addListener("click", function () {
+                                thisLineAnimation.clear();
+                                thisLineAnimation = null;
+                                document.body.removeEventListener("keypress", _keypress);
+                            });
+                        }
+                    }
+                });
+            });
+
+            return ret;
+        }
         function createAnimatedMarker(pathCoords_, multiplier_, map_) {
             const lineSymbol = {
                 path: google.maps.SymbolPath.CIRCLE,
@@ -490,7 +710,7 @@ googleMapsPromise.then(() =>
 
                 const to = pathCoords_[n];
 
-                let incs = (to.time - from.time - 1000 /*milliseconds*/) / multiplier_ / (1000 / 60) /*16 frames per second*/;
+                let incs = (to.time - from.time - 1000) /*milliseconds*/ / multiplier_ / (1000 / 60); /*16 frames per second*/
                 incs = incs > 150 / multiplier_ ? 150 / multiplier_ : Math.ceil(incs); // 150 frames should be about 2500ms.
 
                 // Make the animation run faster at the beginning.
@@ -757,6 +977,10 @@ googleMapsPromise.then(() =>
             return !!q("[data-qa=result-view-bottom]") || location.href.includes("results");
         }
 
+        function isChallenge() {
+            return /Challenge/.test(document.title);
+        }
+
         // Detect if only a single result is shown
         function singleResult() {
             let q = document.querySelector.bind(document);
@@ -780,9 +1004,77 @@ googleMapsPromise.then(() =>
         // Get the location of the street view
         function getPosition(sv) {
             return {
-                lat: sv.position.lat(),
-                lng: sv.position.lng(),
+                lat: +sv.position.lat().toFixed(5),
+                lng: +sv.position.lng().toFixed(5),
             };
+        }
+
+        function createMenu() {
+            if (document.getElementById("pathLoggerMenu")) return false;
+
+            let bodyXY = localStorage["pathLoggerMenuCoords"] ? JSON.parse(localStorage["pathLoggerMenuCoords"]) : { x: 1, y: 1 };
+
+            const container = document.createElement("div");
+            const closeX = document.createElement("div");
+            const header = document.createElement("div");
+            const body = document.createElement("div");
+
+            container.appendChild(header);
+            container.appendChild(body);
+            container.appendChild(closeX);
+
+            container.style.cssText = `position: absolute; z-index: 9999;padding: 5px; top: ${~~bodyXY.y}%; left: ${~~bodyXY.x}%; background-color: white; border-radius: 1ch; height: 50%; font-family: var(--font-neo-sans);`;
+            container.id = "pathLoggerMenu";
+            container.addEventListener("mousedown", function (e) {
+                if (e.target != header) return;
+
+                document.body.addEventListener("mousemove", mmove);
+                document.body.addEventListener("mouseup", mup);
+                let _y = document.body.clientHeight * (bodyXY.y / 100);
+                let _x = document.body.clientWidth * (bodyXY.x / 100);
+
+                let yy = _y - e.y;
+                let xx = e.x - _x;
+
+                function mmove(evt) {
+                    if (Math.abs(evt.x - e.x) > 2 || Math.abs(evt.y - e.y) > 2) {
+                        document.body.removeEventListener("mousemove", mmove);
+                        document.body.addEventListener("mousemove", _mmove);
+                    }
+                }
+
+                function _mmove(evt) {
+                    container.style.top = evt.y + yy + "px";
+                    container.style.left = evt.x - xx + "px";
+                }
+
+                function mup(evt) {
+                    document.body.removeEventListener("mousemove", mmove);
+                    document.body.removeEventListener("mousemove", _mmove);
+                    document.body.removeEventListener("mouseup", mup);
+
+                    bodyXY.y = ((evt.y + yy) / document.body.clientHeight) * 100;
+                    bodyXY.x = ((evt.x - xx) / document.body.clientWidth) * 100;
+
+                    container.style.top = bodyXY.y + "%";
+                    container.style.left = bodyXY.x + "%";
+
+                    localStorage["pathLoggerMenuCoords"] = JSON.stringify(bodyXY);
+                }
+            });
+
+            header.style.cssText = `border-bottom: 1px solid grey; padding: 5px; padding-right: calc(1ch + 9px); cursor: all-scroll;`;
+
+            body.style.cssText = "height: calc(100% - 2rem); overflow-y: scroll;";
+
+            closeX.style.cssText = `position: absolute; top: 5px; right: 5px; padding: 2px; font-size: 1ch; width: 15px; height: 15px; cursor: pointer; background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M19%206.41L17.59%205%2012%2010.59%206.41%205%205%206.41%2010.59%2012%205%2017.59%206.41%2019%2012%2013.41%2017.59%2019%2019%2017.59%2013.41%2012z%22/%3E%3Cpath%20d%3D%22M0%200h24v24H0z%22%20fill%3D%22none%22/%3E%3C/svg%3E");`;
+            closeX.addEventListener("click", function () {
+                container.parentElement.removeChild(container);
+            });
+
+            document.body.appendChild(container);
+
+            return { body: body, header: header, container: container };
         }
     })
 );
