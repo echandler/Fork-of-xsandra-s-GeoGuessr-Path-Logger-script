@@ -341,7 +341,6 @@ googleMapsPromise.then(() =>
                 });
 
             // Add all traces to the map
-            debugger;
             ret.forEach((pathOrChkpntArray) => {
                 let thisLineAnimation = null;
 
@@ -1023,7 +1022,7 @@ googleMapsPromise.then(() =>
             container.appendChild(body);
             container.appendChild(closeX);
 
-            container.style.cssText = `position: absolute; z-index: 9999;padding: 5px; top: ${~~bodyXY.y}%; left: ${~~bodyXY.x}%; background-color: white; border-radius: 1ch; height: 50%; font-family: var(--font-neo-sans);`;
+            container.style.cssText = `display:flex; flex-direction:column; position: absolute; z-index: 9999;padding: 5px; top: ${~~bodyXY.y}%; left: ${~~bodyXY.x}%; background-color: white; border-radius: 1ch; max-height: 50%; font-family: var(--font-neo-sans);`;
             container.id = "pathLoggerMenu";
             container.addEventListener("mousedown", function (e) {
                 if (e.target != header) return;
