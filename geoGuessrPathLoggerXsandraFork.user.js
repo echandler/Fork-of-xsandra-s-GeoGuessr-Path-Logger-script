@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v24.1
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v25
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 24.1
+// @version 25
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -263,8 +263,10 @@ googleMapsPromise.then(() =>
                     if (singleResult()) {
                         pathData = { rounds: [pathData.rounds[roundNumber()]] };
                     }
+                    
+                    let rid = id();
 
-                    const roundsToShow = singleResult() ? [id()] : Object.keys(pathData).filter((map) => map.startsWith(id()));
+                    const roundsToShow = singleResult() ? [roundID()] : [rid +'-1', rid +'-2',rid +'-3',rid +'-4',rid +'-5'];
 
                     pathStuff = rr(pathData, map_);
 
