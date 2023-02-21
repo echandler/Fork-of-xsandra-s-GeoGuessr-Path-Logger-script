@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.1
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 27
+// @version 27.1
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -33,13 +33,6 @@ unsafeWindow.GM_menu = {
 GM_menu.create();
 
 ///////////////// Detect google maps scripts //////////////////////////////////////////////
-
-let alertTimer = setTimeout(function () {
-    if (!unsafeWindow.google) return;
-    alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
-}, 2000);
-
-const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";// TODO: Is this used for anything?
 
 try {
     // Watch <head> and <body> for the Google Maps script to be added
