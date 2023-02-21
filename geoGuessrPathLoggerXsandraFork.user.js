@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v26
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 26
+// @version 27
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -39,30 +39,26 @@ let alertTimer = setTimeout(function () {
     alert("Something happened with the GeoGuessr Path Logger script. Reloading the page will probably fix it.");
 }, 2000);
 
-const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";
+const MAPS_API_URL = "https://maps.googleapis.com/maps/api/js?";// TODO: Is this used for anything?
 
 try {
     // Watch <head> and <body> for the Google Maps script to be added
     let scriptObserver = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-            let dobreak = false;
             for (const node of mutation.addedNodes) {
                 if (node.tagName === "SCRIPT" && /googleapis/.test(node.src)){ //node.src.startsWith(MAPS_API_URL)) {
-                    // When it’s been added and loaded, load the script below.
+                    node.addEventListener("load", () => {
+                        if (!unsafeWindow?.google) return;
+                        if (!unsafeWindow?.google?.maps?.StreetViewPanorama) return;
 
-                    node.addEventListener("load", () => init()); // jshint ignore:line
-
-                    if (unsafeWindow.google){
-                        clearTimeout(alertTimer);
                         if (scriptObserver) scriptObserver.disconnect();
 
                         scriptObserver = undefined;
-                        dobreak = true;
-                        break;
-                    }
+
+                        init();
+                    });
                 }
             }
-            if (dobreak) break;
         }
     });
 
