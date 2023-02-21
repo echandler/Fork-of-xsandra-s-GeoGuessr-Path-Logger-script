@@ -6,4 +6,4 @@ This an attempt to fix some bugs and update a classic GeoGuessr user script.
 
 Original script by xsandra can be found here => https://openuserjs.org/scripts/xsanda/GeoGuessr_Path_Logger
 
-Contributers: enigma_mf, paschtetli 
+Contributers: enigma_mf, paschtetli, BubbA
