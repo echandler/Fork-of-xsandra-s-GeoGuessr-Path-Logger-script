@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.1
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.5
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 27.1
+// @version 27.5
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -773,8 +773,9 @@ function init(){
         // Run forever.
         makeGeoGuessrButtonListeners();
     }, 1000);
-
+    
     function makeGeoGuessrButtonListeners() {
+        const returnToStart = document.querySelector('button[data-qa="return-to-start"]');
         const undoBtn = document.querySelector('button[data-qa="undo-move"]');
         const checkPointBtn = document.querySelector('button[data-qa="set-checkpoint"]');
 
@@ -799,6 +800,10 @@ function init(){
         });
 
         undoBtn.addEventListener("click", function (e) {
+            route.pathCoords.push([]);
+        });
+        
+        returnToStart.addEventListener("click", function (e) {
             route.pathCoords.push([]);
         });
     }
