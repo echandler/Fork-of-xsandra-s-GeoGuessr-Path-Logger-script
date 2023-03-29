@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.5
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.6
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 27.5
+// @version 27.6
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -982,7 +982,7 @@ function init(){
     // Detect if only a single result is shown
     function singleResult() {
         let q = document.querySelector.bind(document);
-        return !!q("[data-qa=guess-description]") || !!q(".country-streak-result__sub-title");
+        return !!q("[data-qa='close-round-result']") || !!q(".country-streak-result__sub-title");
     }
 
     // Get the game ID, for storing the trace against
