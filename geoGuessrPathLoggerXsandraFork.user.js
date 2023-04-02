@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v27.6
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v28
 // @namespace GeoGuessr
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 27.6
+// @version 28
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -345,7 +345,15 @@ function init(){
                 pathOrChkpnt.setMap(map_);
 
                 pathOrChkpnt.addListener("click", function (e) {
-                    if (e.domEvent.shiftKey) {
+                    makeLineAnimation.call(null, true);
+                });
+
+                let closestPoint = null;
+                let deletePointTimer = null;
+
+                pathOrChkpnt.addListener("mouseover", function (e) {
+                        // Show dot for nearest location so player can click on it.
+
                         const latLng = { lat: e.latLng.lat(), lng: e.latLng.lng() };
                         const coords = pathOrChkpnt._coords.flat();
                         const loc = coords.reduce((prev, cur) => {
@@ -355,18 +363,72 @@ function init(){
                             return dist1 < dist2 ? { ...prev, dist: dist1 } : { ...cur, dist: dist2 };
                         });
 
-                        setTimeout(function () {
-                            // This fixes a problem were "_blank" doesn't open in new tab. Not sure why.
-                            window.open(`https://www.google.com/maps?q&layer=c&cbll=${loc.lat},${loc.lng}`, "_blank");
-                        }, 1);
+                        const lineSymbol = {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: "rebeccapurple", // "#669933", //"#566895",
+                            fillOpacity: 1.0,
+                            // strokeColor: "#282c41",
+                            // strokeOpacity: 1,
+                            strokeWeight: 0,
+                        };
 
-                        return;
-                    }
+                        if (closestPoint){
+                          //  console.log(loc, closestPoint.position);
+                            if (closestPoint.map !== null && loc.lat === closestPoint.position.lat() && loc.lat === closestPoint.position.lat() ){
+                               return;
+                            }
+                            closestPoint.setMap(null);
+                            closestPoint = null;
+                        }
 
-                    makeLineAnimation.call(null, true);
+                        let marker = new google.maps.Marker({
+                            position: loc,
+                            icon: lineSymbol,
+                        });
+                        marker._over = false;
+
+                        marker.addListener('click', function(e){
+                            setTimeout(function () {
+                                // setTimeout fixes a problem were "_blank" doesn't open in new tab. Not sure why.
+                                window.open(`https://www.google.com/maps?q&layer=c&cbll=${loc.lat},${loc.lng}`, "_blank");
+                            }, 1);
+                        });
+
+                        marker.addListener("mouseover", function (e) {
+                            clearTimeout(deletePointTimer);
+                            marker._over = true;
+                        });
+
+                        marker.addListener("mouseout", function (e) {
+
+                            marker._over = false;
+                            let m = closestPoint;
+                            deletePointTimer = setTimeout(function(){
+                                if (m){
+                                    m.setMap(null);
+                                }
+                            }, 1000);
+                        });
+
+                        marker.setMap(map_);
+
+                        closestPoint = marker;
+                });
+
+                pathOrChkpnt.addListener("mouseout", function (e) {
+                    // Remove closest point on mouse out from line.
+                    let m = closestPoint;
+                    deletePointTimer = setTimeout(function(){
+                        if (m){
+                            if (m._over) return;
+                            m.setMap(null);
+                        }
+                    }, 1000);
                 });
 
                 pathOrChkpnt.addListener("mouseover", function (e) {
+
                     if (_infoWindow !== null) return;
 
                     _infoWindow = setTimeout(function () {
@@ -375,9 +437,8 @@ function init(){
                         const d = document.createElement("div");
                         d.style.cssText = "color:black; font-size: 1.2em;";
                         d.innerHTML = `<span>Click line to start animation.</span><br>
-                                                        <span>Press "[" or "]" to change speed.</span><br>
-                                                        <span>Hold shift key and click on line to open nearest point in Google Maps.</span>
-                                        `;
+                                       <span>Press "[" or "]" to change speed.</span><br>
+                        `;
 
                         const btnContainer = document.createElement("div");
                         d.appendChild(btnContainer);
@@ -543,6 +604,7 @@ function init(){
                         }
 
                         d.addEventListener("mousedown", () => {
+                            // Prevent info window from closing automatically.
                             // Infowindows don't "do" mousedown events.
                             let removeInfoWindowEvent = map_.addListener("idle", function () {
                                 if (_infoWindow) {
@@ -966,7 +1028,7 @@ function init(){
 
     function isGamePage() {
         let s = location.pathname.startsWith.bind(location.pathname);
-        return s("/challenge/") || s("/results/") || s("/game/");
+        return s("/challenge/") || s("/results/") || s("/game/")|| s("/duels/");
     }
 
     // Detect if a results screen is visible, so the traces should be shown
