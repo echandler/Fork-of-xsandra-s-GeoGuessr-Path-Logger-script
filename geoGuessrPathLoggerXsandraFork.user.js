@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v29
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v30
 // @namespace  Path Logger by echandler
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 29
+// @version 30
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -1054,10 +1054,10 @@ function init(){
 
     function isGamePage() {
         let s = location.pathname.startsWith.bind(location.pathname);
-        return s("/challenge/") || s("/results/") || s("/game/") || s("/duels/");
+        return s("/challenge/") || s("/results/") || s("/game/") || s("/duels/") || s("/live-challenge/");
     }
 
-    // Detect if a results screen is visible, so the tjjraces should be shown
+    // Detect if a results screen is visible, so the traces should be shown
     function resultShown() {
         let q = document.querySelector.bind(document);
         return !!q("[alt='Correct location']");
@@ -1089,6 +1089,11 @@ function init(){
         if (p && p[0]) return p[0];
 
         // For URLs that have a "-" in them
+        if (/live-challenge/.test(location.href)){
+           p = location.href.match(/live-challenge.*/)  
+           return p && p[0];
+        }
+
         p = location.href.match(/(\w*-.*?)(\/|$).*$/);
         if (p && p[1]) return p[1];
     }
