@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name Fork of xsandra's GeoGuessr Path Logger by echandler v28
-// @namespace GeoGuessr
+// @name Fork of xsandra's GeoGuessr Path Logger by echandler v29
+// @namespace  Path Logger by echandler
 // @description Add a trace of where you have been to GeoGuessr’s results screen
-// @version 28
+// @version 29
 // @include https://www.geoguessr.com/*
 // @downloadURL https://github.com/echandler/Fork-of-xsandra-s-GeoGuessr-Path-Logger-script/raw/main/geoGuessrPathLoggerXsandraFork.user.js
 // @copyright 2021, xsanda (https://openuserjs.org/users/xsanda)
@@ -198,7 +198,12 @@ function init(){
 
     function onMapIdleEvent(map_) {
         try {
-            if (!isGamePage()) return;
+            if (!isGamePage()) {
+                pathStuff.forEach((m) => m.forEach((n_) => n_.setMap(null)));
+                pathStuff = [];
+                mapState = {};
+                return;
+            }
 
             if (!google.maps.geometry) {
                 loadGeometry().then(() => onMapIdleEvent(map_));
@@ -207,6 +212,7 @@ function init(){
 
             // create a list of the game state indicators, only updating the map when this changes, to save on computation
             const newMapState = {
+               // gameNum: id(),
                 inGame: inGame,
                 resultShown: resultShown(),
                 singleResult: singleResult(),
@@ -223,54 +229,61 @@ function init(){
             pathStuff = [];
 
             // If we’re looking at the results, draw the traces again
-            if (resultShown()) {
-                // If we were in a round the last time we checked, then we need to save the route
-                if (inGame) {
-                    // encode the route to reduce the storage required.
-                    let pathData = getData();
+            if (!resultShown()) return;
 
-                    if (!pathData[id()]) {
-                        pathData[id()] = { rounds: [] };
-                    }
-
-                    const encodedRoutes = {
-                        p: route.pathCoords,
-                        c: route.checkPointCoords,
-                    };
-
-                    pathData[id()].rounds[roundNumber()] = encodedRoutes;
-
-                    pathData[id()].t = Date.now();
-
-                    saveData(pathData);
-
-                    setRoundDistance(distance);
-                }
-
-                inGame = false;
-
-                // Show all rounds for the current game when viewing the full results
+            // If we were in a round the last time we checked, then we need to save the route
+            if (inGame) {
+                // encode the route to reduce the storage required.
                 let pathData = getData();
-                pathData = pathData[id()];
 
-                if (singleResult()) {
-                    pathData = { rounds: [pathData.rounds[roundNumber()]] };
+                if (!pathData[id()]) {
+                    pathData[id()] = { rounds: [] };
                 }
 
-                let rid = id();
+                const encodedRoutes = {
+                    p: route.pathCoords,
+                    c: route.checkPointCoords,
+                };
 
-                const roundsToShow = singleResult() ? [roundID()] : [rid +'-1', rid +'-2',rid +'-3',rid +'-4',rid +'-5'];
+                let roundNum = roundNumber();
+                roundNum = roundNum > 0? roundNum:pathData[id()].rounds.length;
 
-                pathStuff = showTracesOnMap(pathData, map_);
+                pathData[id()].rounds[roundNum] = encodedRoutes;
 
-                calculateAndShowDistances(roundsToShow, distance);
+                pathData[id()].t = Date.now();
+
+                saveData(pathData);
+
+                setRoundDistance(distance);
             }
+
+            inGame = false;
+
+            // Show all rounds for the current game when viewing the full results
+            let pathData = getData();
+            pathData = pathData[id()];
+
+            if (singleResult()) {
+                let roundNum = roundNumber();
+                roundNum = roundNum > 0? roundNum:pathData.rounds.length - 1;
+
+                pathData = { rounds: [pathData.rounds[roundNum]] };
+            }
+
+            let rid = id();
+
+            const roundsToShow = singleResult() ? [roundID()] : [rid +'-1', rid +'-2',rid +'-3',rid +'-4',rid +'-5'];
+
+            pathStuff = showTracesOnMap(pathData, map_);
+
+            calculateAndShowDistances(roundsToShow, distance);
+
         } catch (e) {
             console.error("GeoGuessr Path Logger Error:", e);
         }
     }
 
-    function showTracesOnMap(pathData, map_) {
+    function showTracesOnMap(pathData, map_, color) {
         let ret = pathData.rounds
         .filter((r) => r) // Ignore missing rounds
         .map((r) => {
@@ -288,7 +301,7 @@ function init(){
                     let line = new google.maps.Polyline({
                         path: coords, //google.maps.geometry.encoding.decodePath(polyline),
                         geodesic: true,
-                        strokeColor: "rebeccapurple", //'#FF0000',
+                        strokeColor: color || "rebeccapurple", //'#FF0000',
                         strokeOpacity: 1.0,
                         strokeWeight: 3,
                     });
@@ -309,7 +322,7 @@ function init(){
                         const lineSymbol = {
                             path: google.maps.SymbolPath.CIRCLE,
                             scale: 3,
-                            fillColor: "rebeccapurple", // "#669933", //"#566895",
+                            fillColor: color || "rebeccapurple", // "#669933", //"#566895",
                             fillOpacity: 0.6,
                             // strokeColor: "#282c41",
                             // strokeOpacity: 1,
@@ -465,7 +478,7 @@ function init(){
 
                         btnContainer.appendChild(uploadBtn);
 
-                        uploadBtn.disabled = singleResult() || !isChallenge() ? true : false;
+                        uploadBtn.disabled = singleResult() || (!isChallenge() && !isDuelsSummary()) ? true : false;
 
                         uploadBtn.addEventListener("click", isUploaded ? clickViewTraces : clickUploadTraces);
 
@@ -526,6 +539,8 @@ function init(){
 
                                     if (ul._highlighted) {
                                         ul._highlighted.style.backgroundColor = "";
+                                    //    console.log("li traces", ul._highlighted._traces);
+                                        removeTheseTraces(ul._highlighted._traces);
                                     }
 
                                     li.style.backgroundColor = "yellow";
@@ -534,10 +549,20 @@ function init(){
 
                                     ret.forEach((m) => m.forEach((n_) => n_.setMap(null)));
 
-                                    showTracesOnMap({ rounds: coords }, map_);
+                                    li._traces = showTracesOnMap({ rounds: coords }, map_, 'red');
                                 });
                             }
                             // menu.body.innerHTML = Object.keys(list);
+                        }
+                        
+                        function removeTheseTraces(traces){
+                            if (!Array.isArray(traces)) return;
+
+                            traces.forEach( aRray =>{
+                                aRray.forEach( trace =>{
+                                    trace.setMap(null);
+                                }) 
+                            })
                         }
 
                         async function clickUploadTraces() {
@@ -710,6 +735,7 @@ function init(){
 
         return ret;
     }
+
     function createAnimatedMarker(pathCoords_, multiplier_, map_) {
         const lineSymbol = {
             path: google.maps.SymbolPath.CIRCLE,
@@ -1028,28 +1054,43 @@ function init(){
 
     function isGamePage() {
         let s = location.pathname.startsWith.bind(location.pathname);
-        return s("/challenge/") || s("/results/") || s("/game/")|| s("/duels/");
+        return s("/challenge/") || s("/results/") || s("/game/") || s("/duels/");
     }
 
-    // Detect if a results screen is visible, so the traces should be shown
+    // Detect if a results screen is visible, so the tjjraces should be shown
     function resultShown() {
         let q = document.querySelector.bind(document);
-        return !!q("[data-qa=result-view-bottom]") || location.href.includes("results");
+        return !!q("[alt='Correct location']");
     }
 
     function isChallenge() {
         return /Challenge/.test(document.title);
     }
+    
+    function isDuelsSummary() {
+        let isSummary = /summary/i.test(location.href);
+        let isDuels = /duels/i.test(location.href);
+        return isDuels && isSummary; 
+    }
 
     // Detect if only a single result is shown
     function singleResult() {
-        let q = document.querySelector.bind(document);
-        return !!q("[data-qa='close-round-result']") || !!q(".country-streak-result__sub-title");
+        let isSummary = /summary/i.test(location.href);
+        if (isSummary) return false;
+
+        let q = document.querySelectorAll.bind(document);
+        let correctLocations = q("[alt='Correct location']");
+        return correctLocations.length < 2;
     }
 
     // Get the game ID, for storing the trace against
     function id() {
-        return location.href.match(/\w{15,}/)[0];
+        let p  = location.href.match(/\w{15,}/);
+        if (p && p[0]) return p[0];
+
+        // For URLs that have a "-" in them
+        p = location.href.match(/(\w*-.*?)(\/|$).*$/);
+        if (p && p[1]) return p[1];
     }
 
     function roundNumber() {
