@@ -1,3 +1,5 @@
+``⚠️`` Installing any script could get your account banned.
+
 # Fork of xsanda's GeoGuessr Path Logger script
 
 This an attempt to fix some bugs and update a classic GeoGuessr user script.
